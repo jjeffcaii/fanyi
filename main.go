@@ -2,20 +2,24 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 )
 
 const (
-	lpad  = " "
-	token = "C78E00EE3519FD0E34684C1318982F7D"
+	lpad     = " "
+	token    = "C78E00EE3519FD0E34684C1318982F7D"
+	endpoint = "http://dict-co.iciba.com/api/dictionary.php"
 )
 
 var input string
@@ -32,7 +36,9 @@ func init() {
 }
 
 func main() {
-	body, err := seek(input)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	body, err := seek(ctx, input)
 	if err != nil {
 		panic(err)
 	}
@@ -44,19 +50,22 @@ func main() {
 	word.Print()
 }
 
-func seek(word string) (body []byte, err error) {
-	var resp *http.Response
-	resp, err = http.Get(fmt.Sprintf("http://dict-co.iciba.com/api/dictionary.php?w=%s&key=%s&type=xml", word, token))
+func seek(ctx context.Context, word string) (body []byte, err error) {
+	uv := url.Values{}
+	uv.Add("w", word)
+	uv.Add("key", token)
+	uv.Add("type", "xml")
+	u := endpoint + "?" + uv.Encode()
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
 	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
 	return
 }
 
